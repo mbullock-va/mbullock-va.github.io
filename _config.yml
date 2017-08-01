@@ -24,7 +24,7 @@ linkedin_username: michael-bullock-90bb27144
 
 # Build settings
 markdown: kramdown
-theme: jekyll-theme-leap-day
+theme: minima
 plugins:
   - jekyll-feed
 

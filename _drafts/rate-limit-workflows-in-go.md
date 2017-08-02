@@ -15,7 +15,7 @@ for i := range items {
 }
 ```
 
-This loop iterates over all the items in a slice and does some work for each item concurrently. For a short slice, with a reasonable implementation of `doWork` this is unlikely to be a problem, but as the slice gets longer there is a greater risk of overwhelming upstream resources. For example, if the items were URLs and the `doWork` function does a URL fetch, next thing you know you have inadvertently DOS'd a website by doing thousands of fetches concurrently. Something similar could happen to your database if `doWork` was querying for data rather than doing a URL fetch. Let's go though some examples that show how we can effectively scale back workflows in Go.
+This loop iterates over all the values in an items slice and does some work for each item concurrently. For a short slice, with a reasonable implementation of `doWork` this is unlikely to be a problem, but as the slice gets longer there is a greater risk of overwhelming upstream resources. For example, if the items were URLs and the `doWork` function does a URL fetch, next thing you know you have inadvertently DOS'd a website by doing thousands of fetches concurrently. Something similar could happen to your database if `doWork` was querying for data rather than doing a URL fetch. Let's go though some examples that show how we can effectively scale back workflows in Go.
 
 ## No Rate Limiting
 First things first, let's establish a starting point with code that actually runs. You will find Go Playground links for the full implementation that you can run in your browser below each code snippet.

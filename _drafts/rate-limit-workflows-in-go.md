@@ -6,7 +6,7 @@ categories: jekyll update
 ---
 # Rate Limiting Workflows in Go
 
-The simplicity of Go's concurrency paradigms contribute to making it an extremely powerful language. But with great power comes great responsibility, right? Spinning up to many go routines to quickly can easily overwhelm your upstream resources which may result in catastrophic outages.
+The simplicity of Go's concurrency paradigms contribute to making it an extremely powerful language. But with great power comes great responsibility, right? Spinning up too many go routines too quickly can easily overwhelm your upstream resources which may result in catastrophic outages.
 
 Consider the following example:
 ```
@@ -15,7 +15,7 @@ for i := range items {
 }
 ```
 
-This loop iterates over all the values in an items slice and does some work for each item concurrently. For a short slice, with a reasonable implementation of `doWork` this is unlikely to be a problem, but as the slice gets longer there is a greater risk of overwhelming upstream resources. For example, if the items were URLs and the `doWork` function does a URL fetch, next thing you know you have inadvertently DOS'd a website by doing thousands of fetches concurrently. Something similar could happen to your database if `doWork` was querying for data rather than doing a URL fetch. Let's go though some examples that show how we can effectively scale back workflows in Go.
+This loop iterates over all the values in an items slice and does some work for each item concurrently. For a short slice, with a reasonable implementation of `doWork` this is unlikely to be a problem, but, as the slice gets longer, there is a greater risk of overwhelming upstream resources. For example, if the items were URLs and the `doWork` function does a URL fetch, next thing you know you have inadvertently DOS'd a website by doing thousands of fetches concurrently. Something similar could happen to your database if `doWork` was querying for data rather than doing a URL fetch. Let's go though some examples that show how we can effectively scale back workflows in Go.
 
 ## No Rate Limiting
 First things first, let's establish a starting point with code that actually runs. You will find Go Playground links for the full implementation that you can run in your browser below each code snippet.
@@ -82,7 +82,7 @@ func processTime(d time.Duration) {
 ```
 Run the code here: [Go Playground](https://play.golang.org/p/wv5QRUtNzZ)
 
-This snippet loops 20 times, and fires off a go routine to do some work, we call this function `doWork` and in this case it does 3 seconds of "processing". This code is unlikely to be a concern for any production server for any reasonable implementation of `doWork`. But change 20 to 1000000 and upstream dependencies like a database could crumble. Note that these are simplified examples, `doWork` does not take any arguments to actually do work. Also, the wait group is simply there to prevent the main function from finishing before all the "work" is done. It is not used to rate limit the work.
+This snippet fires off 20 go routines to do some work. The function called is `doWork`, and, in this case, it does 3 seconds of "processing". This code is unlikely to be a concern for any production server for any reasonable implementation of `doWork`. But change 20 to 1000000 and upstream dependencies like a database could crumble. Note that these are simplified examples; `doWork` does not take any arguments to actually do work. Also, the wait group is simply there to prevent the main function from finishing before all the "work" is done. It is not used to rate limit the work.
 
 Let's get to solving the problem.
 
@@ -117,7 +117,7 @@ func main() {
 ```
 Run the code here: [Go Playground](https://play.golang.org/p/Cs_kZ1POJ3)
 
-The code's main function starts by defining a channel called `jobs`. This channel will coordinate the work that the main function needs to be done (written to the channel), for the workers do (read from the channel). Next we have a loop that starts 3 go routines, each run the `worker` function to do the work. The `worker` function ranges over the jobs channel, pulling a job off the channel then does work for that job, it will continue to do so until the jobs channel is closed. This call happens synchronously so the worker doesn't pull another job from the channel until work is done for it's current job. The main function then loops 20 times as it did before, but this time it simply writes to the jobs channel rather than starting a `doWork` go routine.
+The code's main function starts by defining a channel called `jobs`. This channel will coordinate the work that the main function needs to be done (written to the channel) for the workers to do (read from the channel). Next, we have a loop that starts 3 go routines; each runs the `worker` function to do the work. The `worker` function ranges over the jobs channel, pulling a job off the channel then does work for that job, it will continue to do so until the jobs channel is closed. This call happens synchronously so the worker doesn't pull another job from the channel until work is done for it's current job. The main function then loops 20 times as it did before, but this time it simply writes to the jobs channel rather than starting a `doWork` go routine.
 
 Pretty slick, right? This solution reduces the throughput by only allowing a maximum of 3 go routines to do work concurrently. But, this is only sufficient if your needs are coarse grained. In some cases we will want more control to deal with unknowns, such as how many `doWork` calls will there be per second? If our work involves database queries is 3 concurrent fetches still too fast to avoid taking down the database? What about 1?
 
@@ -142,9 +142,9 @@ func main() {
 ```
 Run the code here: [Go Playground](https://play.golang.org/p/tKVFV-ZjQx)
 
-This next code snippet utilizes a `Ticker` which is a truer implementation of rate limiting than the worker pool implemented above. `time.Tick` returns an unbuffered channel that is written to at a desired frequency. In this case, we configure it to write to the channel at a rate of 2 per second. This provides rate limiting because reading from a channel blocks if there are no values in the channel, as a result, our for loop can read a maximum of 2 values every second, so we only fire off 2 go routines to do work per second. Boom done!
+This next code snippet utilizes a `Ticker` which is a truer implementation of rate limiting than the worker pool implemented above. `time.Tick` returns an unbuffered channel that is written to at a desired frequency. In this case, we configure it to write to the channel at a rate of 2 per second. This provides rate limiting because reading from a channel blocks if there are no values in the channel. As a result, our for loop can read a maximum of 2 values every second, so we only fire off 2 go routines to do work per second. Boom done!
 
-Not so fast. This would ensure that we only do 2 queries per second. But, what happens if these two queries start to backup the upstream resources? (Perhaps a number higher than 2, would be more reasonable in terms of backing up a database, but I leave this for simplicity). Responses to our 2 queries will take longer and longer, but we are still sending them at the same rate! Next thing you know you have way too many concurrent go routines active and you've taken down your upstream dependencies again.
+Not so fast. This would ensure that we only do 2 queries per second. But, what happens if these two queries start to backup the upstream resources? (Perhaps a number higher than 2 would be more reasonable in terms of backing up a database, but I leave this for simplicity). Responses to our 2 queries will take longer and longer, but we are still sending them at the same rate! Next thing you know you have way too many concurrent go routines active and you've taken down your upstream dependencies again.
 
 So, if our dependencies can't keep up we do our best to ease off.
 
@@ -208,7 +208,7 @@ func main() {
 ```
 Run the code here: [Go Playground](https://play.golang.org/p/pyAr0ZIACR)
 
-In this code example, rather than using a pool of worker go routines we've implemented another channel to act as a semaphore. To acquire the semaphore you write to the semaphore channel. Then use a closure, binding the semaphore to a go routine that is running the `doWork` call. Once, that call is done, the go routine reads from the semaphore channel effectively releasing the semaphore. This semaphore works because writing to a channel blocks if the channel's buffer is full, preventing go routines from being started. This solution removes the overhead of needing to setup a worker pool, but incurs extra overhead for starting up each go routines (but remember, go routines are cheap).
+In this code example, rather than using a pool of worker go routines we've implemented another channel to act as a semaphore. To acquire the semaphore you write to the semaphore channel. Then use a closure, binding the semaphore to a go routine that is running the `doWork` call. Once, that call is done, the go routine reads from the semaphore channel effectively releasing the semaphore. This semaphore works because writing to a channel blocks if the channel's buffer is full, which prevents go routines from being started. This solution removes the overhead of needing to setup a worker pool, but it incurs extra overhead for starting up each go routine (but remember, go routines are cheap).
 
 ## Rate Limiting with a Buffered Ticker
 
